@@ -1,6 +1,12 @@
+import os
 import io
 import numpy as np
 import soundfile as sf
+from dotenv import load_dotenv
+
+# Load local environment variables from .env
+load_dotenv()
+
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
