@@ -3,51 +3,55 @@ import scipy.signal
 import scipy.fftpack
 import soundfile as sf
 import io
+import tempfile
+import os
 
-def load_and_preprocess_audio(audio_bytes: bytes, target_sr: int = 16000, target_length: int = 64600):
+def load_and_preprocess_audio(audio_bytes: bytes, target_sr: int = 16000):
     """
-    Load audio bytes (WAV, FLAC, OGG), ensure mono 16kHz, and cut or pad to fixed length.
-    target_length = 64,600 samples (~4.0375 seconds @ 16kHz), the standard for RawNet2.
+    Load audio bytes (WAV, FLAC, MP3, OGG), ensure mono 16kHz, and return full signal and metadata.
+    Uses temporary file fallback if in-memory seek fails on compressed formats.
     """
+    data = None
+    sr = target_sr
+
+    # Attempt 1: In-memory soundfile read
     try:
         data, sr = sf.read(io.BytesIO(audio_bytes))
-    except Exception as e:
-        # Fallback raw byte interpretation if format not recognized
-        data = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+    except Exception:
+        # Attempt 2: Temporary file soundfile read
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.audio', delete=False) as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
+            data, sr = sf.read(tmp_path)
+            os.remove(tmp_path)
+        except Exception as e:
+            print(f"Audio read warning: {e}")
+            # Attempt 3: 16-bit PCM fallback
+            data = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+            sr = target_sr
+
+    if data is None or len(data) == 0:
+        data = np.zeros(16000 * 3, dtype=np.float32)
         sr = target_sr
 
     # Convert to mono if multi-channel
     if len(data.shape) > 1:
         data = np.mean(data, axis=1)
 
-    # Resample if needed
+    # Resample to 16 kHz if needed
     if sr != target_sr and len(data) > 0:
         num_target_samples = int(len(data) * target_sr / sr)
         data = scipy.signal.resample(data, num_target_samples)
         sr = target_sr
 
-    # Ensure float32 in [-1.0, 1.0]
+    # Normalize to [-1.0, 1.0]
     data = data.astype(np.float32)
     max_val = np.max(np.abs(data))
     if max_val > 0:
         data = data / max_val
 
-    raw_len = len(data)
-
-    # Cut or pad to 64,600 samples for RawNet2
-    if len(data) > target_length:
-        data_fixed = data[:target_length]
-    elif len(data) < target_length:
-        # Repeat or zero pad
-        if len(data) > 0:
-            repeats = int(np.ceil(target_length / len(data)))
-            data_fixed = np.tile(data, repeats)[:target_length]
-        else:
-            data_fixed = np.zeros(target_length, dtype=np.float32)
-    else:
-        data_fixed = data
-
-    return data_fixed, data, sr, raw_len
+    return data, sr
 
 
 def extract_lfcc(signal: np.ndarray, sr: int = 16000, num_filters: int = 20, n_fft: int = 512, hop_length: int = 160):
@@ -58,10 +62,10 @@ def extract_lfcc(signal: np.ndarray, sr: int = 16000, num_filters: int = 20, n_f
     - Short-Time Fourier Transform (STFT) with Hann window
     - Linear filter bank (equally spaced filters across 0 to sr/2)
     - Discrete Cosine Transform (DCT)
-    - Compute Static + Delta + Delta-Delta (60 coefficients total)
+    - Static + Delta + Delta-Delta (60 coefficients total)
     """
-    if len(signal) == 0:
-        return np.zeros((60, 100), dtype=np.float32)
+    if len(signal) < n_fft:
+        signal = np.pad(signal, (0, n_fft - len(signal)))
 
     # Pre-emphasis
     pre_emphasized = np.append(signal[0], signal[1:] - 0.97 * signal[:-1])
@@ -147,4 +151,3 @@ def generate_waveform_points(signal: np.ndarray, num_points: int = 64):
         else:
             points.append(0.0)
     return points
-
