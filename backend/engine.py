@@ -154,27 +154,28 @@ class DeepfakeDetectorEngine:
                 chunk_spoof_evidence += 0.30
                 chunk_reasons.append("Phase incoherence in high-frequency bandpass bands")
 
+            # A window is flagged as synthetic if multiple correlated anomalies fire together
             window_spoof_prob = float(np.clip(chunk_spoof_evidence, 0.02, 0.98))
             window_scores.append(window_spoof_prob)
 
-            if window_spoof_prob > 0.40:
+            if chunk_spoof_evidence >= 0.55:
                 hotspots.append({
                     "start": f"{t_start}s",
                     "end": f"{t_end}s",
                     "label": chunk_reasons[0] if chunk_reasons else "Synthetic acoustic anomaly",
-                    "severity": "critical" if window_spoof_prob > 0.60 else "warning"
+                    "severity": "critical" if chunk_spoof_evidence >= 0.70 else "warning"
                 })
 
         # Step 3: Global Aggregation & Decision Boundary
         avg_spoof_prob = float(np.mean(window_scores)) if window_scores else 0.5
         max_spoof_prob = float(np.max(window_scores)) if window_scores else 0.5
         
-        is_spoof = max_spoof_prob >= 0.40 or avg_spoof_prob >= 0.30
+        is_spoof = max_spoof_prob >= 0.55 or avg_spoof_prob >= 0.40
         
         if is_spoof:
             final_spoof_prob = float(np.clip(max(0.68, 0.65 * max_spoof_prob + 0.35 * avg_spoof_prob), 0.65, 0.99))
         else:
-            final_spoof_prob = float(np.clip(0.4 * avg_spoof_prob, 0.01, 0.30))
+            final_spoof_prob = float(np.clip(0.35 * avg_spoof_prob, 0.01, 0.30))
 
         final_bonafide_prob = 1.0 - final_spoof_prob
         confidence = round(float(final_spoof_prob if is_spoof else final_bonafide_prob) * 100, 1)
