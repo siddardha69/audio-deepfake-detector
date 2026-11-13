@@ -129,3 +129,4 @@ class RawNet2(nn.Module):
         pooled = torch.mean(gru_out, dim=1)
         logits = self.fc(pooled)
         return logits
+

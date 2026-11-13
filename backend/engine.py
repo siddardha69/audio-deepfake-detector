@@ -215,3 +215,4 @@ class DeepfakeDetectorEngine:
 
 # Global singleton
 detector_engine = DeepfakeDetectorEngine()
+

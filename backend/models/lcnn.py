@@ -111,3 +111,4 @@ class LCNN(nn.Module):
         if cam.max() > 0:
             cam = cam / cam.max()
         return cam
+

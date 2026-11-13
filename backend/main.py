@@ -250,3 +250,13 @@ def get_benchmarks():
             "observation": "Reporting unseen attack degradation honestly reveals which modern generative codecs still evade conventional acoustic filters, guiding active defense."
         }
     }
+
+
+# Mount production frontend build if dist/ directory exists
+import os
+from fastapi.staticfiles import StaticFiles
+
+dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dist"))
+if os.path.exists(dist_path):
+    app.mount("/", StaticFiles(directory=dist_path, html=True), name="static")
+

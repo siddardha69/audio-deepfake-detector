@@ -147,3 +147,4 @@ def generate_waveform_points(signal: np.ndarray, num_points: int = 64):
         else:
             points.append(0.0)
     return points
+
